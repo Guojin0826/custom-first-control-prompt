@@ -8,6 +8,9 @@
 - Hot injection toggle button on the dock: enable/disable seed injection without restarting
 - Template file (`cfcp-templates.json`) stored next to the profile patch; missing file = empty list, no startup impact
 
+### Fixed
+- `deepFreeze` no longer imported from `@deepseek-ai/dsh-llm` (whose npm build does not re-export it); the function is now inlined locally, fixing plugin load failure on dsh >= 0.1.2-alpha
+
 ### Changed
 - `PanelRequestsView` now includes `injectionEnabled` and `activeTemplate` fields
 - `llm/stream` listener checks the hot toggle before injecting seed messages

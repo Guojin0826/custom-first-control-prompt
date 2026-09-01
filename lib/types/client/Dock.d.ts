@@ -1,8 +1,7 @@
 /**
  * Composer dock strip: a collapsible bar above the message input showing the
- * panel's live request-listening state. Listening defaults to off; the strip
- * offers start/stop, clear, expand/collapse, and hide (re-enabled from the
- * plugin card in settings). All state arrives from the Host panel service.
+ * panel's live request-listening state, template selector, and injection
+ * hot-toggle. All state arrives from the Host panel service.
  */
 import type { ReactNode } from 'react';
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client';
@@ -16,7 +15,7 @@ export interface DockProps extends PropsLocale<'cfcp.panel'> {
 }
 /**
  * Render the dock strip. Hidden state (Host-side `dockVisible` false) renders
- * nothing; the strip comes back through the plugin card in settings.
+ * nothing; the strip comes back through the settings section.
  * @param props - composed slot props.
  */
 export declare function Dock(props: DockProps): ReactNode;

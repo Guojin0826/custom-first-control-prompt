@@ -7,7 +7,7 @@
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client';
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol';
-import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelWriteResult } from '@wm-coders/dsh-custom-first-control-prompt/typert-client';
+import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelTemplateListResult, PanelTemplateWriteResult, PanelWriteResult } from '@wm-coders/dsh-custom-first-control-prompt/typert-client';
 /** The panel verbs the UI binds; every call names the owning session. */
 export interface PanelActions {
     /** Read the profile patch entry. */
@@ -28,6 +28,16 @@ export interface PanelActions {
     setDockVisible(sessionId: SessionId, visible: boolean): Promise<RemoteResult<PanelRequestsView>>;
     /** Assemble this plugin's live system-prompt sections. */
     assemble(sessionId: SessionId): Promise<RemoteResult<PanelAssembleResult>>;
+    /** List saved templates. */
+    listTemplates(sessionId: SessionId): Promise<RemoteResult<PanelTemplateListResult>>;
+    /** Save the current config as a named template. */
+    saveTemplate(sessionId: SessionId, name: string, config: PanelConfigView): Promise<RemoteResult<PanelTemplateWriteResult>>;
+    /** Delete a named template. */
+    deleteTemplate(sessionId: SessionId, name: string): Promise<RemoteResult<PanelTemplateWriteResult>>;
+    /** Apply a named template: write config + enable injection. */
+    applyTemplate(sessionId: SessionId, name: string): Promise<RemoteResult<PanelWriteResult>>;
+    /** Toggle the hot injection switch. */
+    toggleInjection(sessionId: SessionId, enabled: boolean): Promise<RemoteResult<PanelRequestsView>>;
 }
 /**
  * Bind the Host panel service's Remote namespace to the given client context.

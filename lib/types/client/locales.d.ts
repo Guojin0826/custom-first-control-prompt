@@ -57,6 +57,20 @@ export declare const en: {
     readonly roleUser: "user";
     readonly roleAssistant: "assistant";
     readonly configNotFound: "This profile patch file has no custom-first-control-prompt entry yet. Saving creates one.";
+    readonly injectionOn: "Injection ON";
+    readonly injectionOff: "Injection OFF";
+    readonly inject: "Inject";
+    readonly templateSelect: "Template";
+    readonly templateNone: "(none)";
+    readonly templateSaveAs: "Save as template";
+    readonly templateName: "Template name";
+    readonly templateSave: "Save template";
+    readonly templateDelete: "Delete";
+    readonly templateSaved: "Template saved";
+    readonly templateDeleted: "Template deleted";
+    readonly templateApplied: "Template applied";
+    readonly templateEmpty: "No saved templates. Configure content above and save a template.";
+    readonly templateNameEmpty: "Template name cannot be empty.";
 };
 export declare const zh: Record<keyof typeof en, string>;
 /** Dictionary key set shared by both locales. */

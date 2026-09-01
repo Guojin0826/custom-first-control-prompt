@@ -3,7 +3,45 @@
  * alternating user/assistant sequence built once per plugin activation and
  * shared by every intercepted request.
  */
-import { createUserMessage, deepFreeze, MessageId, type Message } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, MessageId, type Message } from '@deepseek-ai/dsh-llm'
+
+/**
+ * Deep-freeze a value in place with an iterative traversal, guarding cycles.
+ * Inlined from dsh-util-values' implementation (dsh-llm's built output does
+ * not re-export it): WeakSet cycle guard + explicit traversal queue, so later
+ * mutation throws without imposing a call-stack depth cap. AbortSignal objects
+ * are skipped: they are the request's live cancellation channel.
+ * @param value - the value to freeze in place.
+ * @returns the same value, frozen.
+ */
+function deepFreeze<T>(value: T): T {
+  const seen = new WeakSet<object>()
+  const pending: (
+    | { kind: 'visit'; node: unknown }
+    | { kind: 'property'; source: Record<string, unknown>; key: string }
+  )[] = [{ kind: 'visit', node: value }]
+  while (pending.length > 0) {
+    const task = pending.pop()
+    if (task === undefined) continue
+    if (task.kind === 'property') {
+      pending.push({ kind: 'visit', node: task.source[task.key] })
+      continue
+    }
+    const node = task.node
+    if (node === null || typeof node !== 'object') continue
+    if (node instanceof AbortSignal) continue
+    if (seen.has(node)) continue
+    seen.add(node)
+    Object.freeze(node)
+    const keys = Object.keys(node)
+    for (let index = keys.length - 1; index >= 0; index--) {
+      const key = keys[index]
+      if (key === undefined) continue
+      pending.push({ kind: 'property', source: node as Record<string, unknown>, key })
+    }
+  }
+  return value
+}
 
 /** Plugin attribution carried by the injected assistant messages' `source`. */
 export const SEED_SOURCE = 'custom-first-control-prompt'
