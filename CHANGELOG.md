@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0] - 2026-09-01
+
+### Added
+- Template system: save/load/delete named config snapshots (sections + history + subagent flag) from the settings page
+- Template selector + "Inject" button on the composer dock strip: pick a template and apply it in one click
+- Hot injection toggle button on the dock: enable/disable seed injection without restarting
+- Template file (`cfcp-templates.json`) stored next to the profile patch; missing file = empty list, no startup impact
+
+### Changed
+- `PanelRequestsView` now includes `injectionEnabled` and `activeTemplate` fields
+- `llm/stream` listener checks the hot toggle before injecting seed messages
+
 ## [0.2.3] - 2026-08-21
 
 ### Fixed

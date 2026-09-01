@@ -9,7 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
-import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelWriteResult } from './panel-types.ts';
+import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelTemplateListResult, PanelTemplateWriteResult, PanelWriteResult } from './panel-types.ts';
 /** Service key: the client reaches these methods as `ctx.remote['custom-first-control-prompt-panel']`. */
 export declare const PANEL_SERVICE_KEY = "custom-first-control-prompt-panel";
 /** The web panel management service. */
@@ -18,6 +18,10 @@ export declare class PanelService extends TypertRemoteService {
     private seq;
     private paused;
     private dockVisible;
+    /** Hot injection toggle; when false the llm/stream listener passes through. */
+    injectionEnabled: boolean;
+    /** Name of the last applied template; empty when none. */
+    activeTemplate: string;
     /** Composed plugin config snapshot, shown when the profile patch has no row. */
     private readonly effective;
     constructor(ctx: Context, effective?: PanelConfigView);
@@ -68,5 +72,21 @@ export declare class PanelService extends TypertRemoteService {
     uiSetDockVisible(agent: Agent, visible: boolean): PanelRequestsView;
     /** Assemble this plugin's live system-prompt sections for the preview tab. */
     previewAssemble(agent: Agent): Promise<PanelAssembleResult>;
+    /** Resolve the template file path next to the profile patch file. */
+    private templatePath;
+    /** Read and parse the template file; missing file = empty list (graceful). */
+    private readTemplates;
+    /** Write templates to the template file. */
+    private writeTemplates;
+    /** List saved templates. */
+    templateList(agent: Agent): Promise<PanelTemplateListResult>;
+    /** Save the current config as a named template (overwrites if name exists). */
+    templateSave(agent: Agent, name: string, config: PanelConfigView): Promise<PanelTemplateWriteResult>;
+    /** Delete a named template. */
+    templateDelete(agent: Agent, name: string): Promise<PanelTemplateWriteResult>;
+    /** Apply a named template: write its config to the patch file and enable injection. */
+    templateApply(agent: Agent, name: string): Promise<PanelWriteResult>;
+    /** Toggle the hot injection switch. */
+    injectionToggle(agent: Agent, enabled: boolean): PanelRequestsView;
 }
 //# sourceMappingURL=panel.d.ts.map

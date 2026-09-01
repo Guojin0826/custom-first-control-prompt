@@ -93,6 +93,40 @@ export interface PanelRequestsView {
   paused: boolean
   /** Whether the composer dock strip is visible. */
   dockVisible: boolean
+  /** Whether seed injection is hot-enabled (default true). */
+  injectionEnabled: boolean
+  /** Name of the last applied template, or empty when none. */
+  activeTemplate: string
+}
+
+/** One saved template: a named snapshot of sections + history + subagent flag. */
+export interface PanelTemplate {
+  /** Template name, unique within the template file. */
+  name: string
+  /** Sections snapshot. */
+  sections: PanelSectionView[]
+  /** History pairs snapshot. */
+  history: PanelPairView[]
+  /** Subagent opt-in snapshot. */
+  includeSubagents: boolean
+}
+
+/** Result of listing saved templates. */
+export interface PanelTemplateListResult {
+  /** Whether the template file was read successfully. */
+  ok: boolean
+  /** Saved templates; empty when the file is missing or has none. */
+  templates: PanelTemplate[]
+  /** Human-readable failure reason; empty on success. */
+  error: string
+}
+
+/** Result of saving or deleting a template. */
+export interface PanelTemplateWriteResult {
+  /** Whether the template file was written. */
+  ok: boolean
+  /** Human-readable failure reason; empty on success. */
+  error: string
 }
 
 /** One assembled section contributed by this plugin. */

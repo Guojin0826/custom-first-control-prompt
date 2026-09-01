@@ -16,6 +16,9 @@ import type {
   PanelConfigView,
   PanelRequestView,
   PanelRequestsView,
+  PanelTemplate,
+  PanelTemplateListResult,
+  PanelTemplateWriteResult,
   PanelWriteResult,
 } from './panel-types.ts'
 
@@ -50,6 +53,10 @@ export class PanelService extends TypertRemoteService {
   private seq = 0
   private paused = true
   private dockVisible = true
+  /** Hot injection toggle; when false the llm/stream listener passes through. */
+  injectionEnabled = true
+  /** Name of the last applied template; empty when none. */
+  activeTemplate = ''
   /** Composed plugin config snapshot, shown when the profile patch has no row. */
   private readonly effective: PanelConfigView | undefined
 
@@ -340,7 +347,7 @@ export class PanelService extends TypertRemoteService {
   @Remote('requests-list')
   requestsList(agent: Agent): PanelRequestsView {
     void agent
-    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible }
+    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible, injectionEnabled: this.injectionEnabled, activeTemplate: this.activeTemplate }
   }
 
   /** Pause or resume request capture. */
@@ -348,7 +355,7 @@ export class PanelService extends TypertRemoteService {
   requestsSetPaused(agent: Agent, paused: boolean): PanelRequestsView {
     void agent
     this.paused = paused === true
-    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible }
+    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible, injectionEnabled: this.injectionEnabled, activeTemplate: this.activeTemplate }
   }
 
   /** Clear the captured request ring. */
@@ -357,7 +364,7 @@ export class PanelService extends TypertRemoteService {
     void agent
     this.ring.length = 0
     this.seq = 0
-    return { requests: [], paused: this.paused, dockVisible: this.dockVisible }
+    return { requests: [], paused: this.paused, dockVisible: this.dockVisible, injectionEnabled: this.injectionEnabled, activeTemplate: this.activeTemplate }
   }
 
   /** Show or hide the composer dock strip. */
@@ -365,7 +372,7 @@ export class PanelService extends TypertRemoteService {
   uiSetDockVisible(agent: Agent, visible: boolean): PanelRequestsView {
     void agent
     this.dockVisible = visible === true
-    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible }
+    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible, injectionEnabled: this.injectionEnabled, activeTemplate: this.activeTemplate }
   }
 
   /** Assemble this plugin's live system-prompt sections for the preview tab. */
@@ -387,5 +394,127 @@ export class PanelService extends TypertRemoteService {
     } catch (error) {
       return { sections: [], error: error instanceof Error ? error.message : String(error) }
     }
+  }
+
+  // ---- template file ----
+
+  /** Resolve the template file path next to the profile patch file. */
+  private async templatePath(): Promise<string | null> {
+    const base = await this.patchPath()
+    if (base === null) return null
+    const norm = base.replace(/\\/g, '/')
+    const i = norm.lastIndexOf('/')
+    if (i <= 0) return null
+    return `${norm.slice(0, i)}/cfcp-templates.json`
+  }
+
+  /** Read and parse the template file; missing file = empty list (graceful). */
+  private async readTemplates(): Promise<PanelTemplate[]> {
+    const path = await this.templatePath()
+    if (path === null) return []
+    const fs = this.ctx.get('fs') as PanelFs | undefined
+    if (fs === undefined) return []
+    try {
+      const target = await fs.resolve(path)
+      const raw = await fs.readText(target)
+      const parsed = JSON.parse(raw) as { templates?: unknown }
+      const arr = Array.isArray(parsed.templates) ? parsed.templates : []
+      return arr.filter((t): t is PanelTemplate =>
+        typeof t === 'object' && t !== null
+        && typeof (t as Record<string, unknown>)['name'] === 'string'
+        && Array.isArray((t as Record<string, unknown>)['sections'])
+        && Array.isArray((t as Record<string, unknown>)['history'])
+      )
+    } catch {
+      return []
+    }
+  }
+
+  /** Write templates to the template file. */
+  private async writeTemplates(templates: readonly PanelTemplate[]): Promise<boolean> {
+    const path = await this.templatePath()
+    if (path === null) return false
+    const fs = this.ctx.get('fs') as PanelFs | undefined
+    if (fs === undefined) return false
+    try {
+      const target = await fs.resolve(path)
+      await fs.writeText(target, JSON.stringify({ templates }, undefined, 2), undefined, undefined, this.writePolicy())
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** List saved templates. */
+  @Remote('template-list')
+  async templateList(agent: Agent): Promise<PanelTemplateListResult> {
+    void agent
+    try {
+      const templates = await this.readTemplates()
+      return { ok: true, templates, error: '' }
+    } catch (error) {
+      return { ok: false, templates: [], error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /** Save the current config as a named template (overwrites if name exists). */
+  @Remote('template-save')
+  async templateSave(agent: Agent, name: string, config: PanelConfigView): Promise<PanelTemplateWriteResult> {
+    void agent
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    if (trimmed.length === 0) return { ok: false, error: 'template name is empty' }
+    const templates = await this.readTemplates()
+    const filtered = templates.filter(t => t.name !== trimmed)
+    filtered.push({
+      name: trimmed,
+      sections: config.sections.map(s => ({ name: s.name, order: s.order, text: s.text, enabled: s.enabled })),
+      history: config.history.map(p => ({ user: p.user, assistant: p.assistant })),
+      includeSubagents: config.includeSubagents,
+    })
+    const ok = await this.writeTemplates(filtered)
+    return { ok, error: ok ? '' : 'failed to write template file' }
+  }
+
+  /** Delete a named template. */
+  @Remote('template-delete')
+  async templateDelete(agent: Agent, name: string): Promise<PanelTemplateWriteResult> {
+    void agent
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    const templates = await this.readTemplates()
+    const filtered = templates.filter(t => t.name !== trimmed)
+    if (filtered.length === templates.length) return { ok: true, error: '' }
+    const ok = await this.writeTemplates(filtered)
+    return { ok, error: ok ? '' : 'failed to write template file' }
+  }
+
+  /** Apply a named template: write its config to the patch file and enable injection. */
+  @Remote('template-apply')
+  async templateApply(agent: Agent, name: string): Promise<PanelWriteResult> {
+    void agent
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    const templates = await this.readTemplates()
+    const found = templates.find(t => t.name === trimmed)
+    if (found === undefined) return { ok: false, path: '', error: `template "${trimmed}" not found` }
+    const config: PanelConfigView = {
+      found: true,
+      sections: found.sections,
+      history: found.history,
+      includeSubagents: found.includeSubagents,
+    }
+    const existing = await this.readPatch()
+    const result = await this.writePatch(PanelService.mergeCoreBlock(existing.ok ? existing.raw : '', config))
+    if (result.ok) {
+      this.activeTemplate = trimmed
+      this.injectionEnabled = true
+    }
+    return result
+  }
+
+  /** Toggle the hot injection switch. */
+  @Remote('injection-toggle')
+  injectionToggle(agent: Agent, enabled: boolean): PanelRequestsView {
+    void agent
+    this.injectionEnabled = enabled === true
+    return { requests: this.ring.slice(), paused: this.paused, dockVisible: this.dockVisible, injectionEnabled: this.injectionEnabled, activeTemplate: this.activeTemplate }
   }
 }

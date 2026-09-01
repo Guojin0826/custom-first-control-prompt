@@ -3,7 +3,7 @@ import type {
   RemoteResult,
   TypertRemoteContribution,
 } from '@deepseek-ai/dsh-typert-protocol'
-import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelWriteResult } from '@wm-coders/dsh-custom-first-control-prompt/typert-client'
+import type { PanelAssembleResult, PanelConfigReadResult, PanelConfigView, PanelRequestsView, PanelTemplateListResult, PanelTemplateWriteResult, PanelWriteResult } from '@wm-coders/dsh-custom-first-control-prompt/typert-client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -12,10 +12,15 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'config-raw-import': (agentId: SessionId, raw: string) => Promise<RemoteResult<PanelWriteResult>>
     'config-read': (agentId: SessionId) => Promise<RemoteResult<PanelConfigReadResult>>
     'config-write': (agentId: SessionId, config: PanelConfigView) => Promise<RemoteResult<PanelWriteResult>>
+    'injection-toggle': (agentId: SessionId, enabled: boolean) => Promise<RemoteResult<PanelRequestsView>>
     'preview-assemble': (agentId: SessionId) => Promise<RemoteResult<PanelAssembleResult>>
     'requests-clear': (agentId: SessionId) => Promise<RemoteResult<PanelRequestsView>>
     'requests-list': (agentId: SessionId) => Promise<RemoteResult<PanelRequestsView>>
     'requests-set-paused': (agentId: SessionId, paused: boolean) => Promise<RemoteResult<PanelRequestsView>>
+    'template-apply': (agentId: SessionId, name: string) => Promise<RemoteResult<PanelWriteResult>>
+    'template-delete': (agentId: SessionId, name: string) => Promise<RemoteResult<PanelTemplateWriteResult>>
+    'template-list': (agentId: SessionId) => Promise<RemoteResult<PanelTemplateListResult>>
+    'template-save': (agentId: SessionId, name: string, config: PanelConfigView) => Promise<RemoteResult<PanelTemplateWriteResult>>
     'ui-set-dock-visible': (agentId: SessionId, visible: boolean) => Promise<RemoteResult<PanelRequestsView>>
   }
   interface TypertRemoteMap {
@@ -23,10 +28,15 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'custom-first-control-prompt-panel/config-raw-import': (agentId: SessionId, raw: string) => Promise<RemoteResult<PanelWriteResult>>
     'custom-first-control-prompt-panel/config-read': (agentId: SessionId) => Promise<RemoteResult<PanelConfigReadResult>>
     'custom-first-control-prompt-panel/config-write': (agentId: SessionId, config: PanelConfigView) => Promise<RemoteResult<PanelWriteResult>>
+    'custom-first-control-prompt-panel/injection-toggle': (agentId: SessionId, enabled: boolean) => Promise<RemoteResult<PanelRequestsView>>
     'custom-first-control-prompt-panel/preview-assemble': (agentId: SessionId) => Promise<RemoteResult<PanelAssembleResult>>
     'custom-first-control-prompt-panel/requests-clear': (agentId: SessionId) => Promise<RemoteResult<PanelRequestsView>>
     'custom-first-control-prompt-panel/requests-list': (agentId: SessionId) => Promise<RemoteResult<PanelRequestsView>>
     'custom-first-control-prompt-panel/requests-set-paused': (agentId: SessionId, paused: boolean) => Promise<RemoteResult<PanelRequestsView>>
+    'custom-first-control-prompt-panel/template-apply': (agentId: SessionId, name: string) => Promise<RemoteResult<PanelWriteResult>>
+    'custom-first-control-prompt-panel/template-delete': (agentId: SessionId, name: string) => Promise<RemoteResult<PanelTemplateWriteResult>>
+    'custom-first-control-prompt-panel/template-list': (agentId: SessionId) => Promise<RemoteResult<PanelTemplateListResult>>
+    'custom-first-control-prompt-panel/template-save': (agentId: SessionId, name: string, config: PanelConfigView) => Promise<RemoteResult<PanelTemplateWriteResult>>
     'custom-first-control-prompt-panel/ui-set-dock-visible': (agentId: SessionId, visible: boolean) => Promise<RemoteResult<PanelRequestsView>>
   }
   interface TypertRemoteNamespaceMap {
@@ -37,10 +47,15 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'agent:custom-first-control-prompt-panel/config-raw-import': (raw: string) => Promise<RemoteResult<PanelWriteResult>>
     'agent:custom-first-control-prompt-panel/config-read': () => Promise<RemoteResult<PanelConfigReadResult>>
     'agent:custom-first-control-prompt-panel/config-write': (config: PanelConfigView) => Promise<RemoteResult<PanelWriteResult>>
+    'agent:custom-first-control-prompt-panel/injection-toggle': (enabled: boolean) => Promise<RemoteResult<PanelRequestsView>>
     'agent:custom-first-control-prompt-panel/preview-assemble': () => Promise<RemoteResult<PanelAssembleResult>>
     'agent:custom-first-control-prompt-panel/requests-clear': () => Promise<RemoteResult<PanelRequestsView>>
     'agent:custom-first-control-prompt-panel/requests-list': () => Promise<RemoteResult<PanelRequestsView>>
     'agent:custom-first-control-prompt-panel/requests-set-paused': (paused: boolean) => Promise<RemoteResult<PanelRequestsView>>
+    'agent:custom-first-control-prompt-panel/template-apply': (name: string) => Promise<RemoteResult<PanelWriteResult>>
+    'agent:custom-first-control-prompt-panel/template-delete': (name: string) => Promise<RemoteResult<PanelTemplateWriteResult>>
+    'agent:custom-first-control-prompt-panel/template-list': () => Promise<RemoteResult<PanelTemplateListResult>>
+    'agent:custom-first-control-prompt-panel/template-save': (name: string, config: PanelConfigView) => Promise<RemoteResult<PanelTemplateWriteResult>>
     'agent:custom-first-control-prompt-panel/ui-set-dock-visible': (visible: boolean) => Promise<RemoteResult<PanelRequestsView>>
   }
 }

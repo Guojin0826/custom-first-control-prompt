@@ -186,6 +186,7 @@ export function apply(ctx: Context, config: Config): void {
     history: (config.history ?? []).map(pair => ({ user: pair.user, assistant: pair.assistant })),
     includeSubagents: config.includeSubagents === true,
   })
+  const panel = ctx.get('custom-first-control-prompt-panel') as PanelService | undefined
   const sections = config.sections ?? []
   const { clean: mountableSections, problems: sectionProblems } = partitionSections(sections)
   for (const problem of sectionProblems) ctx.logger.warn('skipping a configured section: %s', problem)
@@ -213,6 +214,8 @@ export function apply(ctx: Context, config: Config): void {
       reentry.delete(options)
       return next()
     }
+    // Hot injection toggle: when off, pass through without seeding.
+    if (panel !== undefined && !panel.injectionEnabled) return next()
     // Ordinary conversation requests only: auxiliary calls (compaction,
     // session-title) carry `purpose`; hand-built calls carry no `sessionId`.
     if (options.purpose !== undefined) return next()
