@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Show/hide toggle for the composer-top dock strip in the settings panel, so a strip hidden from its own button can be restored without restarting the host
+
+### Fixed
+- Panel and template edits now resolve the profile patch file from `profileContext.patchPath`; the previous unconditional `/profiles/web/cordis.patch.yml` suffix pointed at a nested file the Loader never reads, so edits reported success but changed nothing
+
+### Changed
+- `package.json` targets the 0.2.0-rc.2 runtime: peer ranges updated, `dsh.engines.dsh` declared, and the unavailable `@deepseek-ai/dsh-client-runtime` dropped from `dsh.client.inject`
+
 ## [0.3.0] - 2026-09-01
 
 ### Added

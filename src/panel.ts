@@ -107,15 +107,40 @@ export class PanelService extends TypertRemoteService {
 
   // ---- patch file plumbing ----
 
+  /**
+   * Resolve the profile patch file the loader actually composes.
+   *
+   * Two sources, most authoritative first:
+   *  1. `profileContext.patchPath` — literally the file the Loader reads
+   *     (dsh-app-boot sets it to `join(profileDir, "cordis.patch.yml")`).
+   *  2. `settings.prepareDocument()`, which is `configEditor.documentPath`
+   *     (dsh-config-editor) and therefore that SAME path.
+   *
+   * Source 2 used to be suffixed with "/profiles/web/cordis.patch.yml"
+   * unconditionally. Because the document path is already the patch FILE
+   * inside the profile directory, that produced
+   * `<profile>/profiles/web/cordis.patch.yml` — a nested file the Loader never
+   * reads, so panel edits reported success and changed nothing (and the
+   * template store landed beside it). Treat an already-final patch path as
+   * final, and otherwise append only the filename.
+   */
   private async patchPath(): Promise<string | null> {
+    try {
+      const direct = (this.ctx.get('profileContext') as { patchPath?: string } | undefined)?.patchPath
+      if (typeof direct === 'string' && direct.length > 0) return direct.replace(/\\/g, '/')
+    } catch {
+      // fall through to the settings-based resolution below
+    }
+
     const settings = this.ctx.get('settings') as PanelSettings | undefined
     if (settings !== undefined) {
       try {
         const doc = await settings.prepareDocument()
         if (typeof doc === 'string' && doc.length > 0) {
           const norm = doc.replace(/\\/g, '/')
+          if (/\/cordis\.patch\.yml$/.test(norm)) return norm
           const i = norm.lastIndexOf('/')
-          if (i > 0) return `${norm.slice(0, i)}/profiles/web/cordis.patch.yml`
+          if (i > 0) return `${norm.slice(0, i)}/cordis.patch.yml`
         }
       } catch {
         // fall through to the explicit failure below
