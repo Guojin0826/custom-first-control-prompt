@@ -5,9 +5,6 @@ node_modules/
 lib/*.map
 lib/types/*.map
 lib/tsconfig.tsbuildinfo
-client-ui/lib/*.map
-client-ui/lib/types/**/*.map
-client-ui/lib/tsconfig.tsbuildinfo
 
 # 本机杂项
 *.log

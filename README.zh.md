@@ -6,6 +6,19 @@
 
 ## 安装
 
+**要求 dsh `0.2.0-rc.2`**（`@deepseek-ai/dsh` 的 npm dist-tag `next`）。`package.json` 里的
+dsh peer 精确锁定 `0.2.0-rc.2`，因此本版本**只接受这一个运行时**——在别的版本上框架会
+跳过本插件的 patch 层（并禁用对应 loader 行）并给出不兼容警告，而不是让启动失败。
+要在别的版本上跑，请按目标运行时放宽 peer 范围，或授予精确版本豁免：
+
+```bash
+dsh plugin --profile web allow-version \
+  @wm-coders/dsh-custom-first-control-prompt@0.3.0 \
+  --dsh-version <确切 dsh 版本> --accept-risk
+```
+
+注意：`@deepseek-ai/dsh-web-app` 的 `latest` 仍指老线 `0.0.1-rc.1`，本插件要的是 `next`。
+
 ```bash
 # 从 GitHub 安装（推荐 — 构建产物已提交，无需构建审批）
 dsh plugin --profile web add github:WM-CODER/custom-first-control-prompt
@@ -16,6 +29,9 @@ dsh plugin --profile web add @wm-coders/dsh-custom-first-control-prompt
 # 从本地目录安装（开发用）
 dsh plugin --profile web add ./path/to/custom-first-control-prompt
 ```
+
+**单包**：0.2.2 起 host 与浏览器两半合并为同一个包（`dsh.bundle` + `dsh.client` 同在一个
+manifest），所以**不要再传第二个 `client-ui` 参数**——该目录已不存在。
 
 安装后重启 web 应用（`dsh --profile web` 或运行 `restart-web.ps1` / `restart-web.sh`）。
 

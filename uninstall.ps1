@@ -23,6 +23,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$PluginPkgName = '@wm-coders/dsh-custom-first-control-prompt'
+
 function Write-Step([string]$msg) { Write-Output "== $msg" }
 
 # ---- resolve home ----
@@ -66,7 +68,7 @@ if (-not $Offline) {
   # ---- official path: dsh plugin remove ----
   $dshBin = Join-Path $DshHome 'profiles\node_modules\@deepseek-ai\dsh\lib\bin.js'
   if (-not (Test-Path $dshBin)) {
-    Write-Output "ERROR: dsh CLI not found at $dshBin (is this a 0.1.x deployment?). Re-run with -Offline for the junction fallback."
+    Write-Output "ERROR: dsh CLI not found at $dshBin. Re-run with -Offline for the junction fallback."
     exit 1
   }
   & node $dshBin plugin --profile $ProfileName remove $pluginPkg
@@ -111,6 +113,30 @@ if (-not $Offline) {
     }
   } else {
     Write-Step 'profile patch absent (skip)'
+  }
+
+  # The offline path put the package name into dsh.profile.bundles to enable the
+  # plugin, so removal must take it back out; leaving it behind makes the running
+  # dsh fail to resolve the bundle.
+  $profilePkgPath = Join-Path $profileDir 'package.json'
+  if (Test-Path $profilePkgPath) {
+    try {
+      $pkg = Get-Content $profilePkgPath -Raw | ConvertFrom-Json
+      $bundles = $pkg.dsh.profile.bundles
+      if ($bundles -and ($bundles -contains $PluginPkgName)) {
+        $kept = @($bundles | Where-Object { $_ -ne $PluginPkgName })
+        $pkg.dsh.profile.bundles = $kept
+        $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+        Copy-Item $profilePkgPath "$profilePkgPath.bak-$stamp" -Force
+        [System.IO.File]::WriteAllText($profilePkgPath, ($pkg | ConvertTo-Json -Depth 32), [System.Text.UTF8Encoding]::new($false))
+        Write-Step "dsh.profile.bundles entry removed ($PluginPkgName); backup: package.json.bak-$stamp"
+      } else {
+        Write-Step 'dsh.profile.bundles has no plugin entry (skip)'
+      }
+    } catch {
+      Write-Output "WARN: could not edit dsh.profile.bundles in $profilePkgPath ($($_.Exception.Message))"
+      Write-Output "      remove \"$PluginPkgName\" from dsh.profile.bundles by hand."
+    }
   }
 }
 

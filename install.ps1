@@ -5,9 +5,10 @@
 #   activates this package's dsh.bundle patch layer — the core loader row
 #   appears with neutral sample defaults. The browser panel is auto-discovered
 #   via this package's dsh.client declaration. No profile-patch editing needed.
-# Offline path (-Offline): profile junction + the same row appended to
-#   the profile patch (bundle reconciliation only runs inside dsh plugin add,
-#   so the junction-only path must carry its own row).
+# Offline path (-Offline): profile junction + the package name added to the
+#   profile's dsh.profile.bundles + the same row appended to the profile patch
+#   (bundle reconciliation only runs inside `dsh plugin add`, so the
+#   junction-only path must register itself).
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
@@ -26,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+$PluginPkgName = '@wm-coders/dsh-custom-first-control-prompt'
 
 function Write-Step([string]$msg) { Write-Output "== $msg" }
 
@@ -56,8 +59,7 @@ if (-not (Test-Path (Join-Path $pluginPkg 'package.json'))) {
 # Local installs are link: dependencies; Node resolves the plugin's imports
 # (@deepseek-ai/schemastery, zod, ...) from the linked folder's own
 # node_modules, not the profile's. Junction it to the deployment's shared
-# node_modules root (standard pnpm deployments have it; 0.1.x carries every
-# dependency this plugin needs).
+# node_modules root (standard pnpm deployments have it).
 $depLink = Join-Path $pluginPkg 'node_modules'
 $depTarget = Join-Path $DshHome 'profiles\node_modules'
 if (Test-Path $depLink) {
@@ -75,7 +77,7 @@ if (-not $Offline) {
   # ---- official path: dsh plugin add ----
   $dshBin = Join-Path $DshHome 'profiles\node_modules\@deepseek-ai\dsh\lib\bin.js'
   if (-not (Test-Path $dshBin)) {
-    Write-Output "ERROR: dsh CLI not found at $dshBin (is this a 0.1.x deployment?). Re-run with -Offline for the junction fallback."
+    Write-Output "ERROR: dsh CLI not found at $dshBin. Re-run with -Offline for the junction fallback."
     exit 1
   }
   & node $dshBin plugin --profile $ProfileName add $pluginPkg
@@ -100,6 +102,31 @@ if (-not $Offline) {
       New-Item -ItemType Junction -Path $link -Target $j.Target | Out-Null
       Write-Step "junction created: $($j.Name) -> $($j.Target)"
     }
+  }
+
+  # A junction alone does not load the plugin: since 0.2.x the profile composes
+  # the bundles listed in dsh.profile.bundles, and `dsh plugin add` is what
+  # normally appends it. The offline path must register itself.
+  $profilePkgPath = Join-Path $profileDir 'package.json'
+  if (Test-Path $profilePkgPath) {
+    try {
+      $pkg = Get-Content $profilePkgPath -Raw | ConvertFrom-Json
+      $bundles = @($pkg.dsh.profile.bundles)
+      if ($bundles -contains $PluginPkgName) {
+        Write-Step 'dsh.profile.bundles already lists the plugin (skip)'
+      } else {
+        $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+        Copy-Item $profilePkgPath "$profilePkgPath.bak-$stamp" -Force
+        $pkg.dsh.profile.bundles = @($bundles + $PluginPkgName)
+        [System.IO.File]::WriteAllText($profilePkgPath, ($pkg | ConvertTo-Json -Depth 32), [System.Text.UTF8Encoding]::new($false))
+        Write-Step "dsh.profile.bundles += $PluginPkgName (backup: package.json.bak-$stamp)"
+      }
+    } catch {
+      Write-Output "WARN: could not register the bundle in $profilePkgPath ($($_.Exception.Message))"
+      Write-Output "      add \"$PluginPkgName\" to dsh.profile.bundles by hand, or the plugin will not load."
+    }
+  } else {
+    Write-Output "WARN: profile package.json missing: $profilePkgPath"
   }
 
   $patchPath = Join-Path $profileDir 'cordis.patch.yml'

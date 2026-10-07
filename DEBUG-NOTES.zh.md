@@ -6,10 +6,13 @@
 > `<session-id>`），不含任何机器的用户名、绝对路径、凭据或真实会话标识；经此文件换机器照抄
 > 不会泄漏本机信息。
 >
-> **现状（v3，2026-08-19）**：插件已收敛为**单一注入机制**——`llm/stream` 请求路径拦截
-> （原「路线 C」即插件本体），包名 `@wm-coders/*`，`seedMode`/`historyMode` 配置与
-> A/B 路线、框架补丁全部移除。下文历史章节中的路线讨论（A=hook / B=append / C=intercept）
-> 均为**当时的实测记录**，机制结论仍有效，配置键已不存在。
+> **现状（v3，2026-08-19；版本要求更新见 §1.4）**：插件已收敛为**单一注入机制**——
+> `llm/stream` 请求路径拦截（原「路线 C」即插件本体），包名 `@wm-coders/*`，
+> `seedMode`/`historyMode` 配置与 A/B 路线、框架补丁全部移除；
+> **0.2.2 起宿主与浏览器两半合并为单包**（面板经 `dsh.client` 自动发现）；
+> **当前版本面向 dsh `0.2.0-rc.2`**。下文历史章节中的路线讨论
+> （A=hook / B=append / C=intercept）均为**当时的实测记录**，机制结论仍有效，
+> 配置键已不存在。
 
 ## 0. 铁律（先读）
 
@@ -21,6 +24,13 @@
   `disabled: true`）→ `web-safe` 逃生 profile 重启 → 修产物后回归。
 
 ## 0.4 Changelog 2026-08-19：正规化为官方 bundle 形态（dsh plugin add/remove）
+
+> **本节是当时（0.1.x 时代）的记录，下文部分细节已被后续版本推翻**，
+> 阅读时以本节开头的「后续变更」为准：
+> - **0.2.2 起客户端合并进同一个包**，不再有 `ui-custom-first-control-prompt`
+>   面板行，也不再有 `client-ui/` 目录或第二个包——面板经 `dsh.client` 自动发现。
+>   故下文所有「两行」「面板行」「面板包」「client-ui」的说法均已过期。
+> - **0.3.0 起要求 dsh `0.2.0-rc.2`**（见 §1.4），不再是 0.1.x 线。
 
 **动机**：junction + 手写 profile patch 行的安装形态绕过 pnpm 管理与 CLI 对账，
 卸载靠自制脚本、残留即炸（典型实锤：改名升级后旧 `@deepseek-ai` scope 期待名
@@ -113,7 +123,7 @@ bundle 自包含，通常无 chunk）。
 4. surface 折叠按 turn 键去重，真实 assistant 消息覆盖同 turn 的种子消息。
 另：`Session.append()` 永不更新 `header.seedLength`（仅 `sessions.prepare({seed})` 边界写入），
 inbox 按 `events.slice(header.seedLength ?? 0)` 投影，无法区分种子与真实事件。
-结论：B 与 DSH Session 的 seed 边界机制**结构性不兼容**，npm 0.1.x 上请用 C 路线；
+结论：B 与 DSH Session 的 seed 边界机制**结构性不兼容**，请用 C 路线（即本插件现状）；
 B 保留仅作 A/B/C 对比测试。
 
 **C 路线机制**：`llm/stream` waterfall（`{ prepend: true }`）识别普通对话请求
@@ -200,37 +210,69 @@ stale `seed-*.js` chunk（`clean: false` 堆积）。
 - 现象：web 启动到 typert-loader 阶段报 `ERR_MODULE_NOT_FOUND`。
 - 根因：lib 缺少 Typert 生成的 `typert.host.js` / `typert.remote-client.js`，或依赖链中
   `zod` 不可解析（`typert.host.js` 运行时依赖 zod）。
-- 解法：构建产物必须含 5 类文件：`index.js`、`invariant.js`、`seed-<hash>.js`、
-  `typert.host.js`、`typert.remote-client.js`（`verify-build.ps1` 第 5 项）；
+- 解法：构建产物必须含 `index.js`、`invariant.js`、`typert.host.js`、
+  `typert.remote-client.js`（`verify-build.ps1` 第 5 项），以及浏览器半 `client.js`；
   `<folder>/node_modules` junction 到部署的 `profiles/node_modules`（该目录含 zod 与 dsh
   全家桶），或明确提供可解析 zod 的依赖根。
-- 注意：**面板包 `client-ui/` 无需依赖**——其浏览器 bundle 已内联 zod 与 Remote 贡献。
+- 注意：**浏览器半 `client.js` 无需依赖**——其 bundle 已内联 zod 与 Remote 贡献
+  （0.2.2 起它在同一个包的 `lib/` 下，不再是 `client-ui/`）。
+- 注：C-only 收敛后不再产出 `seed-<hash>.js`（请求路径构建已内联进 `index.js`）；
+  门禁只拦「残留且未被引用」的旧 chunk。
 
 ### 1.3 同 id 重复 insert（patch 叠加）
 
 - 现象：web 起不来，loader/组合报**重复 id**。
-- 根因：同一插件 id 同时出现在 **web bundle 自带 patch**（只有从含该行的主线构建的
-  web-app 才自带 `- id: ui-custom-first-control-prompt`）与 **profile patch**
+- 根因：同一插件 id 同时出现在 **包内 bundle 层 patch**（`cordis.patch.yml`，由
+  `dsh plugin add` 追加进 `dsh.profile.bundles` 后生效）与 **profile patch**
   （`<DSH_HOME>/profiles/web/cordis.patch.yml`）。
 - 解法（关键）：
-  - **npm 0.1.x 发布物 bundle 不带面板行**（实测 rc.6 亦无）→ profile 默认写
-    「核心插件行 + 面板行」两行（`cordis.patch.yml.template` 即此形态）；
-  - **仅当**部署 bundle 确认自带面板行（本地主线构建的 web-app）时，profile 才删掉
-    面板行，只保留核心插件行（`profile-web.patch.yml` 即此形态）。
-- 简化经验：核心行只出现一次（profile 或 bundle 二选一），面板行同理。
+  - **0.2.2 起只有「核心行」这一个 id**——面板已并入同包、经 `dsh.client` 自动发现，
+    不存在面板行，也不存在第二个包；
+  - **方式 A（`dsh plugin add`）**：bundle 层自带核心行 → profile 里**不要**再写
+    `- insert:` 核心行（旧安装留下的必须删掉），自定义走带 id 的定向覆盖；
+  - **方式 B（离线 junction）**：没有对账，profile 里**必须**自带核心行，
+    同时把包名写进 `dsh.profile.bundles`。
+- 简化经验：**核心行只出现一次**（bundle 层或 profile，二选一）。
+- 附带坑：若 profile patch 里出现同 id 的定向覆盖而**没有任何 insert 行**，
+  覆盖仍生效（last-write-wins 按 id 命中 bundle 层那行），这是预期形态。
 
 ### 1.4 dsh 版本错位
 
-- dsh 老线（npm `latest`，0.0.1-rc.x）缺 Typert Remote 线路与相关槽位，本插件不兼容；
-  必须是 **`next` 线**（0.1.x，当前 0.1.0-rc.6；注意 0.1.0-rc.5 **未发布到 npm**）。
+- **当前要求（0.3.0 起）**：本插件面向 **dsh `0.2.0-rc.2`**（npm dist-tag `next`）。
+  dsh 老线（`latest`，0.0.1-rc.x）缺 Typert Remote 线路与相关槽位，本插件不兼容。
 - 确认：`<DSH_HOME>/profiles/node_modules/@deepseek-ai/dsh-web-app/package.json` 的
-  `version` 是否 0.1.x。
+  `version` 应为 `0.2.0-rc.2`。
+- **dist-tag 陷阱**：`@deepseek-ai/dsh-web-app` / `@deepseek-ai/dsh-web` 的 `latest`
+  至今仍指向老线 `0.0.1-rc.1`，只有 `next`（= `0.2.0-rc.2`）是本插件要的线；
+  `@deepseek-ai/dsh` 的 `latest` 与 `next` 则都是 `0.2.0-rc.2`。
+- **peer 是精确锁定，接受范围极窄**：`package.json` 里 9 个 dsh peer 中，只有
+  `@deepseek-ai/dsh` 是 `>=0.2.0-rc.2`，其余 8 个（`dsh-llm`、`dsh-system-prompt`、
+  `dsh-typert-protocol`、`dsh-api-remotes`、`dsh-client-locale`、
+  `dsh-client-ui-conversation`、`dsh-client-ui-settings`、`dsh-client-ui-slots`）
+  都精确写死 `0.2.0-rc.2`。用框架自己的 `evaluatePluginCompatibility()` 实测：
+  **`0.2.0-rc.2` 唯一通过**；`0.0.1-rc.1` / `0.1.0-rc.5` / `0.1.0-rc.6` / `0.1.7-rc.2` /
+  `0.2.0-rc.1` 全部 9 个 peer 报错，`0.2.1-alpha.1` 也有 8 个报错。
+  换运行时必须**放宽 peer** 或**加豁免**（`dsh plugin --profile web allow-version
+  <name@version> --dsh-version <exact> --accept-risk`，写进
+  `<profile>/compatibility.json`，键为精确 `name@version`、值为确切 dsh 版本数组）。
+  豁免按**精确版本**匹配，所以 `version` 一升就得重新授权——这也是本插件暂不升版本号的原因之一。
+- **版本错位的失败模式（不是 fail-loud，易被忽略）**：
+  - bundle 层不兼容 → 该 bundle **被跳过**并列入 `skippedBundles`（web 照常启动，
+    插件静默不工作）；
+  - 插件行不兼容 → 该行被 `disabled` 并在 stderr 打
+    `Plugin <name>@<version> is incompatible with dsh <runtime>: peerDependencies {...}`。
+  两者都不会让 web 起不来，所以「装完没效果」时**先查版本**，别急着查 patch。
+- **`dsh.engines.dsh` 字段目前没有任何框架消费者**（已实测：DSH 各包里无一处读取
+  `dsh.engines`）。它只是给人和工具看的声明，**不产生强制**——真正的门禁是
+  `peerDependencies` + `compatibility.json`。别把它当保险。
 - **完全版钩子只在主线构建**：`agent-loop/session-seed` 钩子仅存在于包含
-  `b1601bec35` 提交的主线构建（如从 dsh 仓库本地构建的部署）；**npm 0.1.x 发布物
-  （含 rc.6）实测均无此钩子**（解包检查 `createAgent` 与 rc.5 相同）。npm 部署要
-  完全版需打 `patches/framework-planA-rc5.patch`（或适配对应版本的补丁）并重建框架，
-  否则自动落基础档（帧）。本机"两处验证过"指：含钩子的仓库构建部署（完全版）与
-  测试 home（同构建）。
+  `b1601bec35` 提交的主线构建（如从 dsh 仓库本地构建的部署）；npm 发布物
+  （含 0.1.x 各版与 0.2.0-rc.2）实测均无此钩子。本插件的请求路径机制**不需要**它。
+- **0.2.x 组合结构变化（注册位置）**：组合树 = profile `package.json` 的
+  `dsh.profile.bundles`（有序列表，逐个叠加各 bundle 的 patch 层）+ `cordis.patch.yml`
+  （用户覆盖层）；`cordis.yml` 本身是空数组。`dsh plugin add` 的对账会把包名自动追加进
+  `dsh.profile.bundles`。因此判断「插件是否启用」要看 `dsh.profile.bundles`，
+  而不是在 patch 里找 `- insert:` 行（patch 层只该有带 id 的定向覆盖）。
 
 ## 2. 插件行为 / 前端问题
 
@@ -369,8 +411,11 @@ Invoke-WebRequest -Uri "http://127.0.0.1:309x/api/session.create" -Method Post -
 |---|---|---|
 | web 起不来，Node parse 错误 | 裸 `@Remote(`（从 src 打包） | 改从 tsc 产物打包（§1.1） |
 | web 起不来，`ERR_MODULE_NOT_FOUND` | typert 产物缺失 / zod 不可解析 | 补产物 / 依赖 junction（§1.2） |
-| web 起不来，客户端包解析失败 | 只装了核心包，bundle 自带面板行解析不到 `client-ui/` | **两包必须同装**（INSTALL.md §0 铁律） |
-| web 起不来，重复 id | profile 与 bundle 重复 insert | 面板行按部署形态：npm 发布物默认写、bundle 自带时删（§1.3） |
+| web 起不来，客户端包解析失败 | 旧版双包形态下只装了核心包 | 0.2.2 起已合并为单包，**不再适用**；确认没有残留的第二个 junction |
+| web 起不来，重复 id | profile 与 bundle 重复 insert | profile patch 只留带 id 的定向覆盖，绝不 `- insert:` 同 id（§1.3） |
+| **web 起来了但插件没效果** | **dsh 版本不匹配 → bundle/行被静默跳过** | **先查版本 = `0.2.0-rc.2`；放宽 peer 或加豁免（§1.4）** |
+| 装了但 `dsh.profile.bundles` 里没有它 | 离线 junction 方式没做启用步骤 | 把包名写进 profile `package.json`（见 INSTALL.md §1.3） |
+| 面板保存提示成功但内容没变 | 旧版 `patchPath()` 写到嵌套的 `profiles/web/profiles/web/cordis.patch.yml` | 升级到含该修复的版本，并删掉那个嵌套残留目录（见 INSTALL.md 备注） |
 | 新会话前端崩溃 / 历史挂起 | 种子 assistant 缺 turn/step | buildSeedEvents 补齐（§2.1） |
 | 两条助手文本不配对 | 种子 user 侧 plugin 来源 | user 侧改 `kind:'user'`（§2.2） |
 | 会话里出现伪造声明 | 框架路径/旧会话残留 | 用新会话验证（§2.3） |

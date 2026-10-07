@@ -6,6 +6,21 @@ Deployment-configured prompt prefix. Ordered system-prompt sections render ahead
 
 ## Installation
 
+**Requires dsh `0.2.0-rc.2`** (npm dist-tag `next` for `@deepseek-ai/dsh`). The dsh peer
+ranges in `package.json` pin `0.2.0-rc.2` exactly, so this release accepts that runtime only —
+on any other version the framework skips the plugin's patch layer (and disables the loader row)
+with an incompatibility warning rather than failing startup. To run elsewhere, widen the peer
+ranges for your target runtime or grant an exact-version exemption:
+
+```bash
+dsh plugin --profile web allow-version \
+  @wm-coders/dsh-custom-first-control-prompt@0.3.0 \
+  --dsh-version <exact dsh version> --accept-risk
+```
+
+Beware: `@deepseek-ai/dsh-web-app` still points its `latest` tag at the legacy `0.0.1-rc.1`
+line; only `next` is the line this plugin targets.
+
 ```bash
 # From GitHub (recommended — built artifacts committed, no build approval needed)
 dsh plugin --profile web add github:WM-CODER/custom-first-control-prompt
@@ -16,6 +31,10 @@ dsh plugin --profile web add @wm-coders/dsh-custom-first-control-prompt
 # From local directory (development)
 dsh plugin --profile web add ./path/to/custom-first-control-prompt
 ```
+
+One package: since 0.2.2 the host and browser halves ship together (`dsh.bundle` +
+`dsh.client` in one manifest), so do **not** pass a second `client-ui` argument — that
+directory no longer exists.
 
 After installation, restart the web app (`dsh --profile web` or run `restart-web.ps1` / `restart-web.sh`).
 

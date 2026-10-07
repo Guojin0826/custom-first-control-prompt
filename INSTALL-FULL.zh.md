@@ -16,12 +16,12 @@
 参考历史注入机制：`llm/stream` 瀑布处**克隆**每次普通对话请求，把配置的参考交换
 （深冻结的交替 user/assistant 消息）前置到 `messages`，用 `ctx.llm.stream(cloned)`
 **重新派发**；带重入保护，原请求对象不改动，也**不写入会话日志**（模型请求层注入，
-前缀缓存友好）。**零框架依赖**（npm 0.1.x 开箱即用，无需任何补丁或钩子）。
+前缀缓存友好）。**零框架依赖**（dsh `0.2.0-rc.2` 开箱即用，无需任何补丁或钩子）。
 
-> **关键事实（已实测证实）**：npm 发布的 `@deepseek-ai/dsh-agent-loop@0.1.0-rc.6`
-> **不含** `agent-loop/session-seed` 钩子（解包检查 `createAgent` 与 rc.5 相同）；
-> 该钩子只存在于包含 `b1601bec35` 提交的主线构建。本插件的请求路径机制正是为
-> npm 0.1.x 部署设计——完全不需要框架补丁。
+> **关键事实（已实测证实）**：`agent-loop/session-seed` 钩子**不在任何 npm 发布物里**
+> （0.1.x 各版与 0.2.0-rc.2 均无；解包检查 `createAgent` 与历史版本相同），
+> 它只存在于包含 `b1601bec35` 提交的主线构建。本插件的请求路径机制正是为
+> **零框架补丁**的发布部署设计的。
 
 ## 1. 前置检查（每台机器必做）
 
@@ -29,34 +29,42 @@
 # DSH_HOME（默认 %USERPROFILE%\.dsh）
 $dsh = Join-Path $env:USERPROFILE '.dsh'
 
-# 1) 部署版本：必须 0.1.x 新线
+# 1) 部署版本：必须是 0.2.0-rc.2（本版本 peer 精确锁定该运行时）
 (Get-Content "$dsh\profiles\node_modules\@deepseek-ai\dsh-web-app\package.json" -Raw | ConvertFrom-Json).version
-#    实测：0.1.0-rc.5 / rc.6（npm 发布物；0.0.1-rc.x 老线不兼容）
+#    期望：0.2.0-rc.2
+#    注意 dist-tag 陷阱：dsh-web-app / dsh-web 的 latest 仍是老线 0.0.1-rc.1，
+#    只有 next（= 0.2.0-rc.2）才是本插件要的线。
+#    版本不符 → 放宽 peer 或 dsh plugin allow-version 加豁免（否则插件被静默跳过）。
 
-# 2) bundle 是否自带插件/面板行（决定 patch 里写哪些行）
-Select-String -Path "$dsh\profiles\node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml" -Pattern "custom-first-control-prompt|ui-custom-first-control-prompt"
-#    npm 0.1.x 实测：两行都不带 → patch 里核心行 + 面板行都要写
-#    （仅当部署 bundle 确认自带面板行——如从含该行的主线构建的 web-app——才不写，
-#      避免同 id 重复 insert 导致 web 起不来）
+# 2) 插件是否已启用（0.2.x 看 dsh.profile.bundles，不是看 patch 行）
+(Get-Content "$dsh\profiles\web\package.json" -Raw | ConvertFrom-Json).dsh.profile.bundles
+#    dsh plugin add 的对账会把包名自动追加到这里；
+#    离线 junction 方式必须自己写进去，否则插件不加载。
+
+# 3) profile patch 里是否残留旧安装的 insert 行（会与 bundle 层同 id 冲突）
+Select-String -Path "$dsh\profiles\web\cordis.patch.yml" -Pattern "custom-first-control-prompt"
+#    期望：只有带 id 的定向覆盖（或完全没有）；绝不出现 `- insert:` 形式的同 id 行
 ```
 
 ## 2. 步骤 A：安装
 
 > **v3.1 起安装正规化**：核心包自带 `dsh.bundle` 声明（包内 `cordis.patch.yml`
-> bundle 层：核心行 + 面板行 + 中性示例默认配置）。**方式 A（官方）**
+> bundle 层：核心行 + 中性示例默认配置）。**方式 A（官方）**
 > `dsh plugin add` 的对账自动激活该层——装完即用，**无需手写 patch 行**；
-> **方式 B（离线 junction）**没有经过对账，需在 profile patch 自带同样的两行。
+> **方式 B（离线 junction）**没有经过对账，需自己把包名写进 profile
+> `dsh.profile.bundles` **并**在 profile patch 自带核心行。
 > 自定义配置永远用**带 id 的定向覆盖**（非 insert），见 `cordis.patch.yml.template`。
 
 ### A0. 方式 A（官方，推荐）：dsh plugin add
 
 ```powershell
-# 依赖链先就位（A1），然后一条命令装两个包：
-node "$dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add "<插件目录>" "<插件目录>\client-ui"
+# 依赖链先就位（A1），然后一条命令装（单包 —— 不要再传 client-ui 参数）：
+node "$dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add "<插件目录>"
 ```
 
-pnpm 以 link 依赖装入两包，CLI 对账读取 `dsh.bundle` 声明并把 bundle 层激活进组合
-（`dsh.profile.bundles` 自动追加）。`install.ps1`（不带参数）即此流程的封装。
+pnpm 以 link 依赖装入，CLI 对账读取 `dsh.bundle` 声明并把包名追加进
+`dsh.profile.bundles`，从而激活 bundle 层。`install.ps1`（不带参数）即此流程的封装。
+浏览器面板经 `dsh.client` 自动发现，无需第二个包。
 卸载对应 `dsh plugin remove`（或 `uninstall.ps1`）——依赖与 bundle 层一起干净移除。
 
 ### A1. 依赖链 junction（插件目录 → 部署依赖根；两种方式都需要）
@@ -65,18 +73,28 @@ pnpm 以 link 依赖装入两包，CLI 对账读取 `dsh.bundle` 声明并把 bu
 New-Item -ItemType Junction -Path "<插件目录>\node_modules" -Target "$dsh\profiles\node_modules"
 ```
 
-### A2. 方式 B（离线）profile 注册（两个包的 junction）
+### A2. 方式 B（离线）profile 注册（单包 junction）
 
 ```powershell
-$dir = "$dsh\profiles\web\node_modules\@wm-coder"
+$dir = "$dsh\profiles\web\node_modules\@wm-coders"
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 New-Item -ItemType Junction -Path "$dir\dsh-custom-first-control-prompt" `
   -Target "<插件目录>"
-New-Item -ItemType Junction -Path "$dir\dsh-client-ui-custom-first-control-prompt" `
-  -Target "<插件目录>\client-ui"
+# 注意 scope 是 @wm-coders（带 s）；0.2.2 起客户端已并入同一个包，没有第二个 junction。
 ```
 
-### A3. 方式 B（离线）patch 行（junction 模式没有对账，profile 必须自带两行）
+### A3. 方式 B（离线）启用：`dsh.profile.bundles` + profile patch 行
+
+离线方式没有对账，所以**两件事都要做**。
+
+**① 把包名写进 `<DSH_HOME>\profiles\web\package.json`**（这一步才是「启用插件」）：
+
+```jsonc
+"dsh": { "profile": { "bundles": [ /* … 已有的 bundle … */ ,
+  "@wm-coders/dsh-custom-first-control-prompt" ] } }
+```
+
+**② profile patch 自带核心行**：
 
 ```yaml
 - insert:
@@ -93,17 +111,14 @@ New-Item -ItemType Junction -Path "$dir\dsh-client-ui-custom-first-control-promp
           - user: "user02"
             assistant: "assist02"
         includeSubagents: false
-
-    # 面板客户端行
-    - id: ui-custom-first-control-prompt
-      name: '@wm-coders/dsh-client-ui-custom-first-control-prompt'
 ```
 
 > **样例提示词一律用中性占位文本**（如 `system 01` / `user01/assist01`）——
 > 指令性文本（如 "end every reply with a period."）会让模型循环。
 > 配置类变更（cordis.patch.yml）走 HMR 热重载（几秒），**无需重启**。
-> **方式 A 装完后 bundle 层已带这两行**：profile patch 里的旧 `- insert:` 同 id 行
-> 必须删掉（根列表重复 → web 起不来）；`uninstall.ps1` 会外科式清理。
+> **方式 A 装完后 bundle 层已带此行**：profile patch 里的旧 `- insert:` 同 id 行
+> 必须删掉（根列表重复 → web 起不来）；`uninstall.ps1` 会清理。
+> 面板**不需要** patch 行——它由 `dsh.client` 自动发现。
 
 ### A4. 安装后健康检查
 
@@ -111,7 +126,7 @@ New-Item -ItemType Junction -Path "$dir\dsh-client-ui-custom-first-control-promp
 powershell -ExecutionPolicy Bypass -File "<插件目录>\verify-deploy.ps1"
 ```
 
-一键检查：插件可解析（含 Config）、组合含核心+面板两行、boot manifest 含面板包、
+一键检查：插件可解析（含 Config）、组合含核心行、客户端 bundle 已注册、
 面板 bundle 路由 200、web 进程在跑、安装模式探测（官方 add / junction）。
 
 ## 2.5 注入机制与验证（决定性，实测通过）
@@ -134,16 +149,17 @@ powershell -ExecutionPolicy Bypass -File "<插件目录>\verify-deploy.ps1"
 
 ## 4. UI 面板启用
 
-方式 A（`dsh plugin add`）下面板行随 bundle 层自动激活；方式 B（离线 junction）
-由 A3 第二行自带。面板行存在且 **web 运行的是当前插件版本**后，
+方式 A（`dsh plugin add`）与方式 B（离线 junction）下面板都**不需要 patch 行**——
+浏览器半在同一个包内，由 `dsh.client` 声明自动发现。**web 运行的是当前插件版本**后，
 **浏览器刷新（F5）**即可见：
 - 设置 → 「自定义优先控制提示词」页面（预览/配置编辑/RAW/LLM 监听）
 - 设置 → 插件 → `@wm-coders/dsh-custom-first-control-prompt` 卡片（两个开关）
 - 对话输入框上方「自定义提示词」条（监听默认关闭）
 
 验证：`Invoke-WebRequest http://127.0.0.1:3080/` 的 HTML 应含
-`dsh-client-ui-custom-first-control-prompt`（boot manifest）；面板 bundle 路由应 200：
-`/plugins/@wm-coders/dsh-client-ui-custom-first-control-prompt/client.js`。
+`dsh-custom-first-control-prompt`（boot manifest）；面板 bundle 路由应 200：
+`/plugins/@wm-coders/dsh-custom-first-control-prompt/client.js`
+（0.2.2 起客户端不再有独立包名，路由与包名一致）。
 
 > **硬纪律（本机实测踩过）**：**更新插件目录（git fetch/reset）后，运行中的 web
 > 进程仍加载旧插件代码（Node ESM 模块缓存）**——目录更新 ≠ 进程生效。
@@ -177,10 +193,11 @@ powershell -ExecutionPolicy Bypass -File "<插件目录>\escape.ps1"
 ## 6. 注意事项（实测踩坑汇总）
 
 1. **目录更新必须重启 web**（Node ESM 缓存）——见 §4 硬纪律；配置类变更（patch）HMR 即可。
-2. **面板「配置编辑」保存**：新版会保留文件里的手动行（面板行）；
-   **旧版运行时**（进程加载旧代码）保存仍会**整文件重建**、丢掉面板行——
+2. **面板「配置编辑」保存**：新版会保留文件里的手动行；
+   **旧版运行时**（进程加载旧代码）保存仍会**整文件重建**、丢掉手动行——
    尽量保持 web 跑最新插件版本。
-3. **面板行 npm 0.1.x 必须写、bundle 自带时别重复写**：同 id 重复 insert → web 起不来。
+3. **同 id 重复 insert → web 起不来**：profile patch 里只留带 id 的定向覆盖，
+   绝不 `- insert:` 与 bundle 层相同的 id（0.2.2 起没有面板行，只剩核心行这一个 id）。
 4. **样例提示词用中性占位文本**，勿用指令性语句（会导致模型循环）。
 5. **启动方式**：`restart-web.ps1`（部署内 `dsh\lib\bin.js web`）与你惯用启动方式
    （如 checkout CLI）等价但进程不同；**别双开**（EADDRINUSE），换启动器先停旧的。
@@ -194,7 +211,7 @@ powershell -ExecutionPolicy Bypass -File "<插件目录>\escape.ps1"
 | `verify-deploy.ps1` | **部署健康检查**（生产就绪，§9.1；一键诊断插件/面板/进程） |
 | `escape.ps1` | 逃生脚本（还原产物 + 屏蔽插件行 + 重启指引） |
 | `restart-web.ps1` | 独立进程重启 web（kill → 启动 → 健康检查 → 日志） |
-| `install.ps1` / `uninstall.ps1` | 一键安装 / 卸载（junction + patch 行 / 还原；uninstall 兼容清理旧 `@deepseek-ai` scope 安装） |
+| `install.ps1` / `uninstall.ps1` | 一键安装 / 卸载（官方 `dsh plugin add/remove` 主线；`-Offline` = junction + `dsh.profile.bundles` + patch 行 / 逆向清理；兼容清理旧 `@deepseek-ai`、`@wm-coder` scope 安装） |
 | `verify-build.ps1` | 产物质量门禁（语法/裸装饰器/导入冒烟/注入实现内联/typert 工件） |
 | `LICENSE` | MIT |
 | `$dsh\profiles\backup-<版本>-lib-*` | 框架产物备份（escape.ps1 回滚来源） |

@@ -71,7 +71,7 @@ if (Test-Path "$modulesDir\@deepseek-ai\dsh\lib\bin.js") {
   $dump = node "$modulesDir\@deepseek-ai\dsh\lib\bin.js" --profile $ProfileName --dump-config 2>&1 | Out-String
   Pop-Location
 }
-Check "composition has core row" ($dump -match '(?m)- id: custom-first-control-prompt') "" "core row missing: dsh plugin add activates the bundle layer; offline installs need the profile rows (install.ps1)"
+Check "composition has core row" ($dump -match '(?m)- id: custom-first-control-prompt') "" "core row missing: dsh plugin add activates the bundle layer; offline installs need the profile row + dsh.profile.bundles entry (install.ps1)"
 $profilePkg = Join-Path $profileDir 'package.json'
 if (Test-Path $profilePkg) {
   $managed = (Get-Content $profilePkg -Raw) -match '@wm-coders/dsh-custom-first-control-prompt'
